@@ -1,10 +1,9 @@
 package io.flutter.vmService;
 
 import org.dartlang.vm.service.consumer.*;
-import org.dartlang.vm.service.element.ErrorRef;
-import org.dartlang.vm.service.element.RPCError;
-import org.dartlang.vm.service.element.Sentinel;
-import org.dartlang.vm.service.element.Success;
+import org.dartlang.vm.service.element.*;
+
+import java.util.List;
 
 public class VmServiceConsumers {
 
@@ -36,27 +35,10 @@ public class VmServiceConsumers {
     }
   }
 
-  public static abstract class BreakpointConsumerWrapper implements BreakpointConsumer {
+  public static abstract class BreakpointsConsumer {
+    abstract void received(List<Breakpoint> breakpointResponses, List<RPCError> errorResponses);
+
     abstract void sourcePositionNotApplicable();
-  }
-
-  public static abstract class EvaluateConsumerWrapper implements EvaluateConsumer {
-    @Override
-    public final void received(ErrorRef response) {
-      noGoodResult();
-    }
-
-    @Override
-    public final void received(Sentinel response) {
-      noGoodResult();
-    }
-
-    @Override
-    public final void onError(RPCError error) {
-      noGoodResult();
-    }
-
-    abstract public void noGoodResult();
   }
 
   public static abstract class InvokeConsumerWrapper implements InvokeConsumer {
@@ -76,5 +58,15 @@ public class VmServiceConsumers {
     }
 
     abstract public void noGoodResult();
+  }
+
+  public static abstract class EmptyResumeConsumer extends ConsumerWrapper implements ResumeConsumer {
+    @Override
+    public void received(Sentinel response) {
+    }
+
+    @Override
+    public void received(Success response) {
+    }
   }
 }

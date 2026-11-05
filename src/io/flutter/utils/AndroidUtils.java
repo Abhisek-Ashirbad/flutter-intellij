@@ -5,18 +5,20 @@
  */
 package io.flutter.utils;
 
-import com.intellij.lang.java.JavaParserDefinition;
-import com.intellij.lexer.Lexer;
-import com.intellij.pom.java.LanguageLevel;
-import com.intellij.psi.JavaTokenType;
-import com.intellij.psi.tree.java.IKeywordElementType;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectType;
+import com.intellij.openapi.project.ProjectTypeService;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-// based on: org.jetbrains.android.util.AndroidUtils
-public class AndroidUtils {
+import javax.lang.model.SourceVersion;
+import java.util.Collection;
 
-  private static final Lexer JAVA_LEXER = JavaParserDefinition.createLexer(LanguageLevel.JDK_1_5);
+// based on: org.jetbrains.android.util.AndroidUtils
+@SuppressWarnings("LocalCanBeFinal")
+public class AndroidUtils {
+  // Flutter internal implementation dependencies.
+  public static final String FLUTTER_MODULE_NAME = "flutter";
 
   /**
    * Validates a potential package name and returns null if the package name is valid, and otherwise
@@ -65,15 +67,15 @@ public class AndroidUtils {
 
   @Nullable
   public static String isReservedKeyword(@NotNull String string) {
-    Lexer lexer = JAVA_LEXER;
-    lexer.start(string);
-    if (lexer.getTokenType() != JavaTokenType.IDENTIFIER) {
-      if (lexer.getTokenType() instanceof IKeywordElementType) {
-        return "Package names cannot contain Java keywords like '" + string + "'";
-      }
-      if (string.isEmpty()) {
-        return "Package segments must be of non-zero length";
-      }
+    if (string.isEmpty()) {
+      return "Package segments must be of non-zero length";
+    }
+
+    SourceVersion javaSource = SourceVersion.latest();
+    if (javaSource.isKeyword(string)) {
+      return "Package names cannot contain Java keywords like '" + string + "'";
+    }
+    if (!javaSource.isIdentifier(string)) {
       return string + " is not a valid identifier";
     }
     return null;
@@ -113,5 +115,17 @@ public class AndroidUtils {
       return "The character '" + c + "' is not allowed in Android application package names";
     }
     return hasSep || !requiresSeparator ? null : "The package must have at least one '.' separator";
+  }
+
+  public static boolean isAndroidProject(@Nullable Project project) {
+    // Note: IntelliJ does not set the project type. When a Flutter module is added to an
+    // IntelliJ-created Android project we need to set it. We need to allow an alternative
+    // name. GradleResourceCompilerConfigurationGenerator depends on "Android".
+    // TODO(messick) Recognize both native Android Studio and IntelliJ Android projects.
+    Collection<ProjectType> projectTypes = ProjectTypeService.getProjectTypes(project);
+    for (ProjectType projectType : projectTypes) {
+      return projectType != null && "Android".equals(projectType.getId());
+    }
+    return false;
   }
 }

@@ -18,12 +18,15 @@ import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiInvalidElementAccessException;
+import com.intellij.psi.impl.source.tree.LeafElement;
 import com.intellij.util.Function;
 import com.intellij.util.Time;
+import com.jetbrains.lang.dart.psi.DartCallExpression;
+import com.jetbrains.lang.dart.psi.DartId;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import javax.swing.*;
+import javax.swing.Icon;
 import java.util.Date;
 import java.util.Map;
 
@@ -43,19 +46,35 @@ public abstract class TestLineMarkerContributor extends RunLineMarkerContributor
   @Nullable
   @Override
   public Info getInfo(@NotNull PsiElement element) {
-    final TestType testCall = testConfigUtils.asTestCall(element);
-    if (testCall != null) {
-      final Icon icon = getTestStateIcon(element, testCall.getIcon());
-      final Function<PsiElement, String> tooltipProvider =
-        psiElement -> testCall.getTooltip(psiElement, testConfigUtils);
-      return new RunLineMarkerContributor.Info(icon, tooltipProvider, ExecutorAction.getActions());
+    // We look for leaf nodes of a PSI tree matching the pattern of a Dart unit test, and place
+    // the line marker at that leaf node; see #4036 for some background.
+    //
+    // The pattern we're matching below is:
+    // DartCallExpression
+    //   DartReferenceExpression
+    //     DartId
+    //       LeafPsiElement
+    if (element instanceof LeafElement && element.getParent() instanceof DartId dartId) {
+
+      if (dartId.getParent() != null) {
+        if (dartId.getParent().getParent() instanceof DartCallExpression dartCallExpression) {
+          final TestType testCall = testConfigUtils.asTestCall(dartCallExpression);
+          if (testCall != null) {
+            final Icon icon = getTestStateIcon(element, testCall.getIcon());
+            final Function<PsiElement, String> tooltipProvider =
+              psiElement -> testCall.getTooltip(psiElement, testConfigUtils);
+            return new RunLineMarkerContributor.Info(icon, ExecutorAction.getActions(), tooltipProvider);
+          }
+        }
+      }
     }
+
+
     return null;
   }
 
   @NotNull
   private static Icon getTestStateIcon(@NotNull PsiElement element, @NotNull Icon defaultIcon) {
-
     // SMTTestProxy maps test run data to a URI derived from a location hint produced by `package:test`.
     // If we can find corresponding data, we can provide state-aware icons. If not, we default to
     // a standard Run state.
@@ -82,8 +101,7 @@ public abstract class TestLineMarkerContributor extends RunLineMarkerContributor
 
       final TestStateStorage storage = TestStateStorage.getInstance(project);
       if (storage != null) {
-        final Map<String, TestStateStorage.Record> tests =
-          storage.getRecentTests(SCANNED_TEST_RESULT_LIMIT, getSinceDate());
+        final Map<String, TestStateStorage.Record> tests = storage.getRecentTests(SCANNED_TEST_RESULT_LIMIT, getSinceDate());
         if (tests != null) {
           // TODO(pq): investigate performance implications.
           for (Map.Entry<String, TestStateStorage.Record> entry : tests.entrySet()) {

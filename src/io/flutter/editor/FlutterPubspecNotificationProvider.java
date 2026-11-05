@@ -5,59 +5,29 @@
  */
 package io.flutter.editor;
 
-import com.intellij.openapi.editor.colors.EditorColors;
 import com.intellij.openapi.fileEditor.FileEditor;
-import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.project.ProjectLocator;
-import com.intellij.openapi.util.Key;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.ui.EditorNotificationPanel;
-import com.intellij.ui.EditorNotifications;
+import com.intellij.ui.EditorNotificationProvider;
 import com.intellij.ui.HyperlinkLabel;
 import icons.FlutterIcons;
 import io.flutter.FlutterUtils;
 import io.flutter.pub.PubRoot;
 import io.flutter.sdk.FlutterSdk;
-import io.flutter.settings.FlutterSettings;
+import io.flutter.utils.UIUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
 import javax.swing.*;
+import java.util.function.Function;
 
-public class FlutterPubspecNotificationProvider extends EditorNotifications.Provider<EditorNotificationPanel> implements DumbAware {
-  private static final Key<EditorNotificationPanel> KEY = Key.create("flutter.pubspec");
-
-  @NotNull private final Project project;
-
-  @NotNull private final FlutterSettings settings;
-
-  public FlutterPubspecNotificationProvider(@NotNull Project project, @NotNull FlutterSettings settings) {
-    this.project = project;
-    this.settings = settings;
-  }
-
-  @NotNull
-  @Override
-  public Key<EditorNotificationPanel> getKey() {
-    return KEY;
-  }
-
+public final class FlutterPubspecNotificationProvider implements EditorNotificationProvider {
   @Nullable
   @Override
-  public EditorNotificationPanel createNotificationPanel(@NotNull VirtualFile file, @NotNull FileEditor editor) {
-    if (!file.isInLocalFileSystem()) {
-      return null;
-    }
-
-    // If the user has opted out of using pub in a project with both bazel rules and pub rules,
-    // then we will default to bazel instead of pub.
-    if (settings.shouldUseBazel()) {
-      return null;
-    }
-
-    // We only show this notification inside pubspec files.
-    if (!PubRoot.isPubspec(file)) {
+  public Function<? super @NotNull FileEditor, ? extends @Nullable JComponent> collectNotificationData(@NotNull Project project,
+                                                                                                       @NotNull VirtualFile file) {
+    // We only show this notification inside of local pubspec files.
+    if (!PubRoot.isPubspec(file) || !file.isInLocalFileSystem()) {
       return null;
     }
 
@@ -66,56 +36,64 @@ public class FlutterPubspecNotificationProvider extends EditorNotifications.Prov
       return null;
     }
 
-    if (FlutterSdk.getFlutterSdk(project) == null) {
+    final FlutterSdk flutterSdk = FlutterSdk.getFlutterSdk(project);
+    if (flutterSdk == null) {
       return null;
     }
 
-    return new FlutterPubspecActionsPanel(file);
+    return fileEditor -> new FlutterPubspecActionsPanel(fileEditor, project, flutterSdk);
   }
 
   static class FlutterPubspecActionsPanel extends EditorNotificationPanel {
     @NotNull final VirtualFile myFile;
+    @NotNull final Project myProject;
+    @NotNull final FlutterSdk myFlutterSdk;
 
-    FlutterPubspecActionsPanel(@NotNull VirtualFile file) {
-      super(EditorColors.GUTTER_BACKGROUND);
+    FlutterPubspecActionsPanel(@NotNull FileEditor fileEditor, @NotNull Project project, @NotNull FlutterSdk flutterSdk) {
+      super(UIUtils.getEditorNotificationBackgroundColor());
 
-      myFile = file;
+      myFile = fileEditor.getFile();
+      myProject = project;
+      myFlutterSdk = flutterSdk;
 
       icon(FlutterIcons.Flutter);
       text("Flutter commands");
 
-      // "flutter.packages.get"
-      HyperlinkLabel label = createActionLabel("Packages get", () -> runPackagesGet(false));
+      // "flutter.pub.get"
+      HyperlinkLabel label = createActionLabel("Pub get", () -> runPubGet(false));
       label.setToolTipText("Install referenced packages");
 
-      // "flutter.packages.upgrade"
-      label = createActionLabel("Packages upgrade", () -> runPackagesGet(true));
+      // "flutter.pub.upgrade"
+      label = createActionLabel("Pub upgrade", () -> runPubGet(true));
       label.setToolTipText("Upgrade referenced packages to the latest versions");
 
-      myLinksPanel.add(new JSeparator(SwingConstants.VERTICAL));
-      label = createActionLabel("Flutter upgrade", "flutter.upgrade");
-      label.setToolTipText("Upgrade the Flutter framework to the latest version");
+     // "flutter.pub.outdated"
+      label = createActionLabel("Pub outdated", this::runPubOutdated);
+      label.setToolTipText("Analyze packages to determine which ones can be upgraded");
 
-      myLinksPanel.add(new JSeparator(SwingConstants.VERTICAL));
+      if (myLinksPanel != null) {
+        myLinksPanel.add(new JSeparator(SwingConstants.VERTICAL));
+      }
       label = createActionLabel("Flutter doctor", "flutter.doctor");
       label.setToolTipText("Validate installed tools and their versions");
     }
 
-    private void runPackagesGet(boolean upgrade) {
-      // We can assert below since we know we're on a pubspec.yaml file in a project, with a valid Flutter SDK.
-      final Project project = ProjectLocator.getInstance().guessProjectForFile(myFile);
-      assert (project != null);
-      final FlutterSdk sdk = FlutterSdk.getFlutterSdk(project);
-      assert (sdk != null);
-
+    private void runPubGet(boolean upgrade) {
       final PubRoot root = PubRoot.forDirectory(myFile.getParent());
       if (root != null) {
         if (!upgrade) {
-          sdk.startPackagesGet(root, project);
+          myFlutterSdk.startPubGet(root, myProject);
         }
         else {
-          sdk.startPackagesUpgrade(root, project);
+          myFlutterSdk.startPubUpgrade(root, myProject);
         }
+      }
+    }
+
+    private void runPubOutdated() {
+      final PubRoot root = PubRoot.forDirectory(myFile.getParent());
+      if (root != null) {
+        myFlutterSdk.startPubOutdated(root, myProject);
       }
     }
   }

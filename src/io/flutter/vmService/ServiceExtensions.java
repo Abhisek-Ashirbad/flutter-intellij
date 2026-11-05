@@ -73,14 +73,46 @@ public class ServiceExtensions {
       Arrays.asList("iOS", "android", "fuchsia"),
       Arrays.asList("Platform: iOS", "Platform: Android", "Platform: Fuchsia"));
 
+  /**
+   * Toggle whether interacting with the device selects widgets or triggers
+   * normal interactions.
+   */
   public static final ToggleableServiceExtensionDescription<Boolean> toggleSelectWidgetMode =
     new ToggleableServiceExtensionDescription<>(
-      "ext.flutter.inspector.show",
+      "ext.flutter.inspector.selectMode",
       "Select Widget Mode",
       true,
       false,
       "Disable Select Widget Mode",
       "Enable Select Widget Mode");
+
+  public static final ToggleableServiceExtensionDescription<Boolean> toggleOnDeviceWidgetInspector =
+    new ToggleableServiceExtensionDescription<>(
+      "ext.flutter.inspector.show",
+      "Select Widget Mode",
+      true,
+      false,
+      // Technically this enables the on-device widget inspector but for older
+      // versions of package:flutter it makes sense to describe this extension as
+      // toggling widget select mode as it is the only way to toggle that mode.
+      "Disable Select Widget Mode",
+      "Enable Select Widget Mode");
+
+  /**
+   * Toggle whether the inspector on-device overlay is enabled.
+   * <p>
+   * When available, the inspector overlay can be enabled at any time as it will
+   * not interfere with user interaction with the app unless inspector select
+   * mode is triggered.
+   */
+  public static final ToggleableServiceExtensionDescription<Boolean> enableOnDeviceInspector =
+    new ToggleableServiceExtensionDescription<>(
+      "ext.flutter.inspector.enable",
+      "Enable on-device inspector",
+      true,
+      false,
+      "Exit on-device inspector",
+      "Enter on-device inspector");
 
   public static final ToggleableServiceExtensionDescription<Boolean> toggleShowStructuredErrors =
     new ToggleableServiceExtensionDescription<>(
@@ -116,25 +148,30 @@ public class ServiceExtensions {
   // These extensions are not toggleable and do not need to be stored as a ToggleableServiceExtensionDescription object.
   public static final String flutterPrefix = "ext.flutter.";
   public static final String inspectorPrefix = "ext.flutter.inspector.";
-  public static final String setPubRootDirectories = "ext.flutter.inspector.setPubRootDirectories";
+  public static final String addPubRootDirectories = "ext.flutter.inspector.addPubRootDirectories";
   public static final String enableLogs = "ext.flutter.logs.enable";
   public static final String loggingChannels = "ext.flutter.logs.loggingChannels";
   public static final String designerRender = "ext.flutter.designer.render";
+  public static final String flutterListViews = "_flutter.listViews";
+  public static final String displayRefreshRate = "_flutter.getDisplayRefreshRate";
 
-  static final List<ServiceExtensionDescription> toggleableExtensionDescriptions = Arrays.asList(
+  static final List<ServiceExtensionDescription<?>> toggleableExtensionDescriptions = Arrays.asList(
     debugAllowBanner,
     debugPaint,
     debugPaintBaselines,
+    enableOnDeviceInspector,
     performanceOverlay,
     repaintRainbow,
     slowAnimations,
+    toggleOnDeviceWidgetInspector,
     togglePlatformMode,
     toggleSelectWidgetMode,
     toggleShowStructuredErrors,
     trackRebuildWidgets,
-    trackRepaintWidgets);
+    trackRepaintWidgets
+  );
 
-  public static final Map<String, ServiceExtensionDescription> toggleableExtensionsWhitelist =
+  public static final Map<String, ServiceExtensionDescription<?>> toggleableExtensionsAllowList =
     toggleableExtensionDescriptions.stream().collect(
       Collectors.toMap(
         ServiceExtensionDescription::getExtension,

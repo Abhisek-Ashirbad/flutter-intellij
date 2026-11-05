@@ -14,89 +14,58 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
-import java.util.regex.Pattern;
 
 /**
- * Fold lines like
- * '/Users/.../projects/flutter/flutter/bin/flutter --no-color packages get'.
+ * Fold lines like '/Users/.../projects/flutter/flutter/bin/flutter packages get', and their
+ * Windows equivalents, such as 'C:\flutter\bin\flutter.bat packages get'.
  */
 public class FlutterConsoleFolding extends ConsoleFolding {
   private static final String flutterMarker =
-    FlutterConstants.INDEPENDENT_PATH_SEPARATOR + FlutterSdkUtil.flutterScriptName() + " --no-color ";
+    FlutterConstants.INDEPENDENT_PATH_SEPARATOR + FlutterSdkUtil.flutterScriptName() + " ";
 
-  // CoreSimulatorBridge: Requesting launch of ... with options: {
-  private static final Pattern iosPattern = Pattern.compile("^\\w+: .* \\{$");
+  private static final String windowsFlutterMarker = "\\" + FlutterSdkUtil.flutterScriptName() + " ";
 
-  //     [x86_64] libnetcore-856.20.4
-  // 0   libsystem_network.dylib             0x0000000111918682 __nw_create_backtrace_string + 123
-  // 1   libnetwork.dylib                    0x0000000111ab2932 nw_socket_add_input_handler + 3100
-  private static final String iosCrashFormat1 = "\t        [";
-
-  // (
-  //    0   Foundation                          0x0000000102c3697d __destroyPortContext + 283
-  //    1   CoreFoundation                      0x0000000105002370 ____CFMachPortChecker_block_invoke + 160
-  //    11  libdyld.dylib                       0x00000001073ac68d start + 1
-  // )
-  private static final String iosCrashFormat2 = "\t(";
-
-  // CoreSimulatorBridge: Beginning launch sequence for bundle 'com.yourcompany.flutterGallery'
-  //         retryTimeout: 300.000000 (default write com.apple.CoreSimulatorBridge LaunchRetryTimeout <value>)
-  //         bootTimeout: 300.000000 (default write com.apple.CoreSimulatorBridge BootRetryTimeout <value>)
-  //         bootLeeway: 120.000000 (default write com.apple.CoreSimulatorBridge BootLeeway <value>)
-  //         Note: Use 'xcrun simctl spawn booted defaults write <domain> <key> <value>' to modify defaults in the booted Simulator device.
-  //     Simulator booted at: 2017-02-24 07:56:56 +0000
-  //     Current time: 2017-02-24 07:57:56 +0000
-  //     Within boot leeway: YES
-  private static final String launchSequencePrefix = "CoreSimulatorBridge: Beginning launch sequence for bundle";
-
-  private boolean isFolding = false;
+  /**
+   * Returns the index of the earliest Flutter marker in the text, using either path separator, or -1 if there is none.
+   */
+  private static int indexOfMarker(@NotNull String text) {
+    final int index = text.indexOf(flutterMarker);
+    final int windowsIndex = text.indexOf(windowsFlutterMarker);
+    if (index == -1) {
+      return windowsIndex;
+    }
+    if (windowsIndex == -1) {
+      return index;
+    }
+    return Math.min(index, windowsIndex);
+  }
 
   @Override
   public boolean shouldFoldLine(@NotNull Project project, @NotNull String line) {
-    if (line.contains(flutterMarker)) {
-      isFolding = false;
-      return true;
-    }
+    final int index = indexOfMarker(line);
+    return index != -1 && line.indexOf(' ') > index;
+  }
 
-    if (iosPattern.matcher(line).matches() || line.startsWith(iosCrashFormat1) || line.startsWith(launchSequencePrefix)) {
-      isFolding = true;
-      return false;
-    }
-
-    if (line.equals(iosCrashFormat2)) {
-      isFolding = true;
-      return true;
-    }
-
-    if (isFolding && line.startsWith(("\t"))) {
-      return true;
-    }
-    else {
-      isFolding = false;
-      return false;
-    }
+  @Override
+  public boolean shouldBeAttachedToThePreviousLine() {
+    // This ensures that we don't get appended to the previous (likely unrelated) line.
+    return false;
   }
 
   @Nullable
   @Override
   public String getPlaceholderText(@NotNull Project project, @NotNull List<String> lines) {
     final String fullText = StringUtil.join(lines, "\n");
-    final int index = fullText.indexOf(flutterMarker);
-    if (index == -1) {
-      final String trimmed = fullText.trim();
-
-      if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
-        return " ( ... )";
-      }
-      else if (lines.stream().anyMatch((s) -> s.endsWith("}"))) {
-        return " ... }";
-      }
-      else {
-        return " ...";
-      }
+    final int index = indexOfMarker(fullText);
+    if (index != -1) {
+      // Both markers have the same length, so the arguments start right after it.
+      String results = "flutter " + fullText.substring(index + flutterMarker.length());
+      results = results.replace("--machine ", "");
+      results = results.replace("--start-paused ", "");
+      return results;
     }
     else {
-      return "flutter " + fullText.substring(index + flutterMarker.length());
+      return fullText.trim();
     }
   }
 }

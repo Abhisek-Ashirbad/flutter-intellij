@@ -7,23 +7,25 @@ package io.flutter.editor;
 
 import com.intellij.openapi.diagnostic.Logger;
 import io.flutter.FlutterUtils;
+import io.flutter.logging.PluginLogger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 
 public class FlutterColors {
-
-  private static final Logger LOG = Logger.getInstance(FlutterColors.class);
+  private static final @NotNull Logger LOG = PluginLogger.createLogger(FlutterColors.class);
 
   public static class FlutterColor {
     @NotNull
     private final Color color;
     private final boolean isPrimary;
 
-    private FlutterColor(@NotNull Color color, boolean isPrimary) {
+    FlutterColor(@NotNull Color color, boolean isPrimary) {
       this.color = color;
       this.isPrimary = isPrimary;
     }
@@ -38,16 +40,30 @@ public class FlutterColors {
     }
   }
 
+  static final String primarySuffix = ".primary";
+  static final String defaultShade = "[500]";
+
   private static final Properties colors;
+  private static final Map<Color, String> colorToName;
 
   static {
     colors = new Properties();
 
     try {
-      colors.load(FlutterUtils.class.getResourceAsStream("/flutter/colors.properties"));
+      colors.load(FlutterUtils.class.getResourceAsStream("/flutter/colors/material.properties"));
     }
     catch (IOException e) {
-      FlutterUtils.warn(LOG, e);
+      FlutterUtils.warn(LOG, "Failed to load colors", e, true);
+    }
+
+    colorToName = new HashMap<>();
+    for (Map.Entry<Object, Object> entry : colors.entrySet()) {
+      final String name = (String)entry.getKey();
+      final String value = (String)entry.getValue();
+      final Color color = parseColor(value);
+      if (color != null) {
+        colorToName.put(color, name);
+      }
     }
   }
 
@@ -67,8 +83,8 @@ public class FlutterColors {
         return new FlutterColor(color, false);
       }
     }
-    else if (colors.containsKey(key + ".primary")) {
-      final Color color = getColorValue(key + ".primary");
+    else if (colors.containsKey(key + primarySuffix)) {
+      final Color color = getColorValue(key + primarySuffix);
       if (color != null) {
         return new FlutterColor(color, true);
       }
@@ -77,13 +93,32 @@ public class FlutterColors {
     return null;
   }
 
-  private static Color getColorValue(String name) {
-    try {
-      final String hexValue = colors.getProperty(name);
-      if (hexValue == null) {
-        return null;
-      }
+  /**
+   * Returns the shortest material color name matching a color if one exists.
+   */
+  @Nullable
+  public static String getColorName(@Nullable Color color) {
+    String name = colorToName.get(color);
+    if (name == null) return null;
+    // Normalize to avoid including suffixes that are not required.
+    name = maybeTrimSuffix(name, primarySuffix);
+    name = maybeTrimSuffix(name, defaultShade);
+    return name;
+  }
 
+  private static String maybeTrimSuffix(String value, String suffix) {
+    if (value.endsWith(suffix)) {
+      return value.substring(0, value.length() - suffix.length());
+    }
+    return value;
+  }
+
+  static @Nullable Color parseColor(String hexValue) {
+    if (hexValue == null) {
+      return null;
+    }
+
+    try {
       // argb to r, g, b, a
       final long value = Long.parseLong(hexValue, 16);
 
@@ -93,5 +128,10 @@ public class FlutterColors {
     catch (IllegalArgumentException e) {
       return null;
     }
+  }
+
+  private static Color getColorValue(String name) {
+    final String hexValue = colors.getProperty(name);
+    return parseColor(hexValue);
   }
 }

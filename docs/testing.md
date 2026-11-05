@@ -1,11 +1,14 @@
 # Plugin Smoke Testing
 
+> [!WARNING]
+> **Outdated Documentation**: This smoke testing document contains legacy manual test procedures. For up-to-date release verification instructions and the active manual testing checklist, refer to the [`release-plugin` skill](../.agents/skills/release-plugin/SKILL.md#5-manual-testing-checklist).
+
 Manual tests to execute before plugin releases.
 
 ## Setup
 
-Pre-reqs: Run through the [flutter setup](https://flutter.io/docs/get-started/install) and
-[flutter getting started](https://flutter.io/docs/development/tools/ide) guides.
+Pre-reqs: Run through the [flutter setup](https://flutter.dev/docs/get-started/install) and
+[flutter getting started](https://flutter.dev/docs/development/tools/ide) guides.
 
 * Run `flutter upgrade` in a terminal to get the latest version prior to starting testing.
 
@@ -19,17 +22,18 @@ Pre-reqs: Run through the [flutter setup](https://flutter.io/docs/get-started/in
 
 ## Project Creation
 
-Validate basic project creation. Find your other.xml and remove FLUTTER_SDK_KNOWN_PATHS and remove `flutter` from your PATH.
+Validate basic project creation. Find your other.xml (~/Library/Application Support/Google/<IDE>/options/other.xml) and remove FLUTTER_SDK_KNOWN_PATHS and remove `flutter` from your PATH.
 This might require a reboot. Start from the Welcome screen at least once.
 
 * Create a **simple project** (`File > New > Project...`, pick `Flutter`; on Android Studio, `File > New > New Flutter Project...`).
   * (select an `Application` type project)
+  * use a project name that contains a space -- project location must be lowercase_with_underscores
 * Confirm that:
   * Project contents are created.
     * Verify that a run configuration (`main.dart`) is enabled in the run/debug selector.
   * Navigation works.
-    * Open `lib/main.dart` and navigate to `Scaffold`, from line 37 or so.
-    * Verify that the new editor includes a sample creation banner.
+    * Open `lib/main.dart` and navigate to `AppBar`, from line 69 or so.
+    * Verify that the new editor includes a 'View hosted code sample' banner.
   * There are no analysis errors or warnings.
   * Pub operations work.
     * Open `pubspec.yaml` and click the "Packages get" and "Packages upgrade" links.
@@ -44,7 +48,7 @@ This might require a reboot. Start from the Welcome screen at least once.
 * Confirm that:
   * Project contents are created.
     * Verify that `<project root>/ios/Classes/Swift<Project Name>Plugin.swift` exists.
-    * Verify that a run configuration (`<Project Name>.dart`) is enabled in the run/debug selector.
+    * Verify that a run configuration (`main.dart`) is enabled in the run/debug selector.
   * `Open Android module in Android Studio` does the right thing
     * Navigate to and select `<project root>/android/src/main`
     * Select `Flutter > Open Android module in Android Studio` from the project list menu
@@ -53,15 +57,11 @@ This might require a reboot. Start from the Welcome screen at least once.
 * Create a **module project** (`File > New > Project...`, pick `Flutter`; on Android Studio, `File > New > New Flutter Project...`), specify "Module" as the project type.
 * Confirm that:
   * Project contents are created.
-    * Verify that a run configuration (`<Project Name>.dart`) is enabled in the run/debug selector.
+    * Verify that a run configuration (`main.dart`) is enabled in the run/debug selector.
     * Verify that directories `.ios` and `.android` exist.
-* Convert to editable native code (`Tools > Flutter > Make host app editable`)
-* Confirm that:
-  * Project contents are created.
-    * Verify that directories `ios` and `android` exist, in addition to `.ios` and `.android`.
 * Run the app and verify that it starts correctly.
 * Stop the app.
-* Navigate to and select `<project root>/android`
+* Navigate to and select `<project root>/.android`
 * Select `Flutter > Open Android module in Android Studio` from the project list menu
   * Opening in a new window is recommended. If necessary change your preference/setting to allow that.
 * Verify that Gradle sync completes normally
@@ -74,7 +74,7 @@ Validate that our example projects can be opened.
 
 * close any open projects in IDEA
 * from the Welcome screen choose `Open` (IntelliJ) or `Open an existing Android Studio project` (AS)
-* browse to and select `<flutter-root>/examples/flutter_gallery`
+* browse to and select `<flutter-root>/examples/hello_world`
 * ensure there are no analysis errors or warnings
 * test that code completion is working as expected
 * ensure that the `main.dart` launch configuration shows up and is selected
@@ -124,7 +124,6 @@ In the newly created app:
 * open the inspector
 * change the display by clicking `Render Tree` and the refresh button
 * open the performance view
-* (in Android Studio): verify that the performance view is active and the memory view is not
 * hit resume in the debugger
 
 ## Hot Reload
@@ -147,7 +146,7 @@ Keybindings:
 ## Hot Restart
 
 * change the text and counter line back
-* hit the `Flutter Hot Restart` button (or hit the Debug button again, or cmd-shift-s / ctrl-shift-s)
+* hit the `Flutter Hot Restart` button (or hit the Debug button again)
 * validate that the text and state resets, and the count increases
 
 ## Debugging Sessions
@@ -165,20 +164,100 @@ Verify that projects without Flutter project metadata open properly and are give
 * create a new Flutter project and delete IntelliJ metadata:
   * `flutter create foo_bar`
   * `cd foo_bar`
-  * `rm -rf .idea`
-  * `rm foo_bar.iml`
+  * `rm -rf .idea` (Windows: `rd /s /q .idea`)
+  * `rm foo_bar.iml` (Windows: `del foo_bar.iml`)
 * open project ("File > Open")
-* verify that the project has the Flutter module type (the device pull-down displays) and analyzes cleanly
+* verify that the project has the Flutter module type (the device pull-down displays, the Flutter Outline window is present, etc.) and analyzes cleanly
 
 ## Fresh Install Configuration
 
 Verify installation and configuration in a fresh IDEA installation.
 
 * Follow the instructions to
-  [simulate a fresh installation](https://github.com/flutter/flutter-intellij/wiki/Development#simulating-a-fresh-install).
-* (If not running in a "runtime workbench", [install the plugins](https://flutter.io/docs/development/packages-and-plugins/using-packages).)
+  [simulate a fresh installation](Development.md#simulating-a-fresh-install).
+* (If not running in a "runtime workbench", [install the plugins](https://flutter.dev/docs/development/packages-and-plugins/using-packages).)
 * Open "Languages & Frameworks>Flutter" in Preferences and verify that there is
   no Flutter SDK set.
 * Set the Flutter SDK path to a valid SDK location.
   * Verify that invalid locations are rejected (and cannot be applied).
 * Verify project creation, run/debug.
+
+## Add-to-app module integration test
+Create and debug a Flutter module in an Android app. Do this twice, once 
+using Java and again with Kotlin as the language choice for the Android app.
+The location of the Flutter module is important. Put it in the Android app
+directory once and put it outside the app another time.
+
+### Create an Android app
+
+Start Android Studio and use the File > New > New Project menu to open 
+the new project wizard. Choose the template that includes a Basic
+Activity. On the next page, use Kotlin and minimum API level 16.
+Let the system stabilize (Gradle sync).
+
+Switch the Project view to
+the Project Files mode. Collapse the Gradle window if it is open.
+
+### Create a Flutter module
+
+Use the File > New > New Module menu to start the new module wizard.
+Choose the Flutter Module template. Fill out the wizard pages and
+click Finish, then wait a bit. Android Studio needs to do two
+successive Gradle sync's. The first one generates an error message,
+which is corrected by the second one. Ignore the error. Let the
+system stabilize again.
+
+### Link the Flutter module to the Android app
+
+Go to the editor for MainActivity.kt. Change the onCreate method:
+```kotlin
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        setSupportActionBar(findViewById(R.id.toolbar))
+        val engine = FlutterEngine(this.applicationContext)
+        engine.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault())
+        findViewById<FloatingActionButton>(R.id.fab).setOnClickListener { view ->
+            FlutterEngineCache.getInstance().put("1", engine)
+            startActivity(FlutterActivity.withCachedEngine("1").build(this))
+        }
+    }
+```
+If you opted to use Java, use this:
+```java
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        FlutterEngine engine = new FlutterEngine(getApplicationContext());
+        engine.getDartExecutor().executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault());
+        findViewById(R.id.fab).setOnClickListener(view -> {
+            FlutterEngineCache.getInstance().put("1", engine);
+            startActivity(FlutterActivity.withCachedEngine("1").build(this));
+        });
+    }
+```
+You need to add some imports. Click on each red name then type
+`alt-return`. Accept the suggestion. "FlutterActivity" has two choices;
+use the one from the io.flutter.embedGradle library, io.flutter.embedding.android.FlutterActivity.
+
+Open an editor on the AndroidManifest.xml. Add this line to the
+<application> tag:
+```xml
+        <activity android:name="io.flutter.embedding.android.FlutterActivity" />
+```
+  
+At this point, click the "hammer" icon to build the application.
+
+### Debug the app
+
+The run config should show the Flutter run config, which makes the Flutter Attach
+button active. Click the Flutter Attach button, or use the menu item Run > Flutter
+Attach. (Note: with the kotlin code above you need to start the attach process
+before starting the Android app.)
+
+Change the run config to "app" for the Android app. Click the Debug button.
+Wait for the app to launch.
+
+When the app is visible, click the mail icon at bottom right. The Flutter
+screen should become visible. At this point you can set breakpoints and
+do hot reload as for a stand-alone Flutter app.

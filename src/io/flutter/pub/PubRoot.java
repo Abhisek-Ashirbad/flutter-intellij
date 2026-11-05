@@ -8,20 +8,22 @@ package io.flutter.pub;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.actionSystem.LangDataKeys;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.module.Module;
-import com.intellij.openapi.module.ModuleManager;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.roots.ModuleRootManager;
 import com.intellij.openapi.roots.ProjectFileIndex;
 import com.intellij.openapi.roots.ProjectRootManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
+import com.jetbrains.lang.dart.util.PackageConfigFileUtil;
 import io.flutter.FlutterUtils;
+import io.flutter.utils.OpenApiUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.File;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * A snapshot of the root directory of a pub package.
@@ -29,7 +31,9 @@ import java.util.List;
  * That is, a directory containing (at a minimum) a pubspec.yaml file.
  */
 public class PubRoot {
-  private static final Logger LOG = Logger.getInstance(PubRoot.class);
+  public static final String DOT_DART_TOOL = ".dart_tool";
+  public static final String PACKAGE_CONFIG_JSON = "package_config.json";
+  public static final String PUBSPEC_YAML = "pubspec.yaml";
 
   @NotNull
   private final VirtualFile root;
@@ -37,18 +41,9 @@ public class PubRoot {
   @NotNull
   private final VirtualFile pubspec;
 
-  @Nullable
-  private final VirtualFile packagesFile;
-
-  @Nullable
-  private final VirtualFile lib;
-
-  private PubRoot(@NotNull VirtualFile root, @NotNull VirtualFile pubspec, @Nullable VirtualFile packagesFile, @Nullable VirtualFile lib) {
-    assert (!root.getPath().endsWith("/"));
+  private PubRoot(@NotNull VirtualFile root, @NotNull VirtualFile pubspec) {
     this.root = root;
     this.pubspec = pubspec;
-    this.packagesFile = packagesFile;
-    this.lib = lib;
   }
 
   /**
@@ -56,7 +51,10 @@ public class PubRoot {
    */
   @Nullable
   public static PubRoot forFile(@Nullable VirtualFile file) {
-    if (file == null) return null;
+    if (file == null) {
+      return null;
+    }
+
     if (file.isDirectory()) {
       final PubRoot root = forDirectory(file.getParent());
       if (root != null) return root;
@@ -72,23 +70,19 @@ public class PubRoot {
    */
   @Nullable
   public static PubRoot forEventWithRefresh(@NotNull final AnActionEvent event) {
+    assert CommonDataKeys.PSI_FILE != null;
     final PsiFile psiFile = CommonDataKeys.PSI_FILE.getData(event.getDataContext());
     if (psiFile != null) {
       final PubRoot root = forPsiFile(psiFile);
-      return root == null ? null : root.refresh();
-    }
-
-    final Module module = LangDataKeys.MODULE.getData(event.getDataContext());
-    if (module != null) {
-      final List<PubRoot> roots = PubRoots.forModule(module);
-      if (!roots.isEmpty()) {
-        return roots.get(0);
+      if (root != null) {
+        return root.refresh();
       }
     }
 
-    final Project project = event.getData(CommonDataKeys.PROJECT);
-    if (project != null) {
-      final List<PubRoot> roots = PubRoots.forProject(project);
+    assert LangDataKeys.MODULE != null;
+    final Module module = LangDataKeys.MODULE.getData(event.getDataContext());
+    if (module != null) {
+      final List<PubRoot> roots = PubRoots.forModule(module);
       if (!roots.isEmpty()) {
         return roots.get(0);
       }
@@ -124,10 +118,18 @@ public class PubRoot {
    * Based on the filesystem cache; doesn't refresh anything.
    */
   @Nullable
-  public static PubRoot forDescendant(VirtualFile fileOrDir, Project project) {
-    final ProjectFileIndex index = ProjectRootManager.getInstance(project).getFileIndex();
-    final VirtualFile root = index.getContentRootForFile(fileOrDir);
-    return forDirectory(root);
+  public static PubRoot forDescendant(@Nullable VirtualFile fileOrDir, @NotNull Project project) {
+    // To be compatible w/ `flutter_enhancement_suite`, we allow a null `fileOrDir`.
+    // https://github.com/flutter/flutter-intellij/issues/8399
+    if (fileOrDir == null) return null;
+    ProjectRootManager manager = ProjectRootManager.getInstance(project);
+    if (manager == null) return null;
+    
+    final ProjectFileIndex index = manager.getFileIndex();
+    return OpenApiUtils.safeRunReadAction(() -> {
+      final VirtualFile root = index.getContentRootForFile(fileOrDir);
+      return forDirectory(root);
+    });
   }
 
   /**
@@ -139,26 +141,16 @@ public class PubRoot {
    */
   @Nullable
   public static PubRoot forDirectory(@Nullable VirtualFile dir) {
-    if (dir == null || !dir.isDirectory()) {
+    if (dir == null || !dir.isDirectory() || dir.getPath().endsWith("/")) {
       return null;
     }
-
-    final VirtualFile pubspec = dir.findChild("pubspec.yaml");
+    final VirtualFile pubspec = dir.findChild(PUBSPEC_YAML);
     if (pubspec == null || !pubspec.exists() || pubspec.isDirectory()) {
       return null;
     }
-
-    VirtualFile packages = dir.findChild(".packages");
-    if (packages == null || !packages.exists() || packages.isDirectory()) {
-      packages = null;
+    else {
+      return new PubRoot(dir, pubspec);
     }
-
-    VirtualFile lib = dir.findChild("lib");
-    if (lib == null || !lib.exists() || !lib.isDirectory()) {
-      lib = null;
-    }
-
-    return new PubRoot(dir, pubspec, packages, lib);
   }
 
   /**
@@ -168,7 +160,7 @@ public class PubRoot {
    */
   @Nullable
   public static PubRoot forDirectoryWithRefresh(@NotNull VirtualFile dir) {
-    // Ensure file existence and timestamps are up to date.
+    // Ensure file existence and timestamps are up-to-date.
     dir.refresh(false, false);
 
     return forDirectory(dir);
@@ -189,8 +181,17 @@ public class PubRoot {
     return path.substring(root.length() + 1);
   }
 
+  private static final String @NotNull [] TEST_DIRS = new String[]{ // TODO 2022.1
+    "/test/",
+    "/integration_test/",
+    "/test_driver/",
+    "/testing/"
+  };
+
   /**
    * Returns true if the given file is a directory that contains tests.
+   *
+   * @noinspection BooleanMethodIsAlwaysInverted
    */
   public boolean hasTests(@NotNull VirtualFile dir) {
     if (!dir.isDirectory()) return false;
@@ -198,13 +199,12 @@ public class PubRoot {
     // We can run tests in the pub root. (It will look in the test dir.)
     if (getRoot().equals(dir)) return true;
 
-    // Any directory in the test dir or below is also okay.
-    final VirtualFile wanted = getTestDir();
-    if (wanted == null) return false;
-
-    while (dir != null) {
-      if (wanted.equals(dir)) return true;
-      dir = dir.getParent();
+    String path = dir.getPath() + "/";
+    // Any directory in a test dir or below is also okay.
+    for (String testDir : TEST_DIRS) {
+      if (path.contains(testDir)) {
+        return true;
+      }
     }
     return false;
   }
@@ -240,19 +240,27 @@ public class PubRoot {
    * Returns true if the pubspec declares a flutter dependency.
    */
   public boolean declaresFlutter() {
-    // Check if the cache needs to be updated.
-    if (cachedPubspecInfo == null || cachedPubspecInfo.getModificationStamp() != pubspec.getModificationStamp()) {
-      cachedPubspecInfo = FlutterUtils.getFlutterPubspecInfo(pubspec);
-    }
-
+    validateUpdateCachedPubspecInfo();
+    assert cachedPubspecInfo != null;
     return cachedPubspecInfo.declaresFlutter();
   }
 
   /**
-   * Returns true if the pubspec declares a flutter web dependency.
+   * Returns true if the pubspec declares "resolution: workspace".
    */
-  public boolean declaresFlutterWeb() {
-    return FlutterUtils.declaresFlutterWeb(pubspec);
+  public boolean declaresResolutionWorkspace() {
+    validateUpdateCachedPubspecInfo();
+    assert cachedPubspecInfo != null;
+    return cachedPubspecInfo.isResolutionWorkspace();
+  }
+
+  /**
+   * Check if the cache needs to be updated.
+   */
+  private void validateUpdateCachedPubspecInfo() {
+    if (cachedPubspecInfo == null || cachedPubspecInfo.getModificationStamp() != pubspec.getModificationStamp()) {
+      cachedPubspecInfo = FlutterUtils.getFlutterPubspecInfo(pubspec);
+    }
   }
 
   /**
@@ -262,33 +270,66 @@ public class PubRoot {
     return FlutterUtils.isFlutterPlugin(pubspec);
   }
 
-  /**
-   * Returns true if the directory content looks like a Flutter module.
-   */
-  public boolean isFlutterModule() {
-    return root.findChild(".android") != null;
-  }
-
-  public boolean isNonEditableFlutterModule() {
-    return isFlutterModule() && root.findChild("android") == null;
-  }
-
   @Nullable
-  public VirtualFile getPackagesFile() {
-    return packagesFile;
+  public VirtualFile getPackageConfigFile() {
+    VirtualFile rootToExpectToolsDirectory = root;
+
+    // If this package.yaml file has resolution:workspace declared, check in the parent directory for
+    //  the .dart_tool/ directory.
+    //   https://github.com/flutter/flutter-intellij/issues/7623
+    if (declaresResolutionWorkspace() && root.getParent() != null && root.getParent().isDirectory()) {
+      rootToExpectToolsDirectory = root.getParent();
+    }
+    assert rootToExpectToolsDirectory != null;
+    assert rootToExpectToolsDirectory.isDirectory();
+    final VirtualFile tools = rootToExpectToolsDirectory.findChild(DOT_DART_TOOL);
+    if (tools == null || !tools.isDirectory()) {
+      return null;
+    }
+    final VirtualFile config = tools.findChild(PACKAGE_CONFIG_JSON);
+    if (config != null && !config.isDirectory()) {
+      return config;
+    }
+    return null;
+  }
+
+  public @Nullable Map<String, String> getPackagesMap() {
+    final var packageConfigFile = getPackageConfigFile();
+    if (packageConfigFile != null) {
+      return PackageConfigFileUtil.getPackagesMapFromPackageConfigJsonFile(packageConfigFile);
+    }
+
+    return null;
   }
 
   /**
-   * Returns true if the packages file is up to date.
+   * Returns true if the packages are up-to-date with regard to the `pubspec.yaml`. The `.packages` file is used if no
+   * `.tool/package_config.json` is found.  The default value returned is to return false.
+   *
+   * @noinspection BooleanMethodIsAlwaysInverted
    */
-  @SuppressWarnings("BooleanMethodIsAlwaysInverted")
   public boolean hasUpToDatePackages() {
-    return packagesFile != null && pubspec.getTimeStamp() < packagesFile.getTimeStamp();
+    // See context at these URLs for the reason we can't use VirtualFile#getTimeStamp()
+    // https://github.com/flutter/flutter-intellij/issues/7538
+    // https://intellij-support.jetbrains.com/hc/en-us/community/posts/8009750602514-VirtualFile-is-not-refreshed
+
+    final VirtualFile configFile = getPackageConfigFile();
+    if (configFile != null) {
+      long pubspecLastModified = new File(pubspec.getPath()).lastModified();
+      long configLastModified = new File(configFile.getPath()).lastModified();
+      return pubspecLastModified < configLastModified;
+    }
+    return false;
   }
 
   @Nullable
   public VirtualFile getLib() {
-    return lib;
+    final VirtualFile lib = root.findChild("lib");
+    if (lib != null && lib.isDirectory()) {
+      return lib;
+    }
+
+    return null;
   }
 
   /**
@@ -300,9 +341,10 @@ public class PubRoot {
     if (main != null) {
       return main;
     }
+    final VirtualFile lib = getLib();
     if (lib != null) {
       final VirtualFile[] files = lib.getChildren();
-      if (files.length != 0) {
+      if (files != null && files.length != 0) {
         return files[0];
       }
     }
@@ -314,12 +356,14 @@ public class PubRoot {
    */
   @Nullable
   public VirtualFile getLibMain() {
+    final VirtualFile lib = getLib();
     return lib == null ? null : lib.findChild("main.dart");
   }
 
   /**
    * Returns example/lib/main.dart if it exists.
    */
+  @Nullable
   public VirtualFile getExampleLibMain() {
     final VirtualFile exampleDir = root.findChild("example");
     if (exampleDir != null) {
@@ -332,8 +376,8 @@ public class PubRoot {
   }
 
   @Nullable
-  public VirtualFile getTestDir() {
-    return root.findChild("test");
+  public VirtualFile getIntegrationTestDir() {
+    return root.findChild("integration_test");
   }
 
   @Nullable
@@ -368,15 +412,15 @@ public class PubRoot {
   /**
    * Returns true if the project has a module for the "android" directory.
    */
-  public boolean hasAndroidModule(Project project) {
+  public boolean hasAndroidModule(@NotNull Project project) {
     final VirtualFile androidDir = getAndroidDir();
     if (androidDir == null) {
       return false;
     }
 
-    for (Module module : ModuleManager.getInstance(project).getModules()) {
-      for (VirtualFile contentRoot : ModuleRootManager.getInstance(module).getContentRoots()) {
-        if (contentRoot.equals(androidDir)) {
+    for (Module module : OpenApiUtils.getModules(project)) {
+      for (VirtualFile contentRoot : OpenApiUtils.getContentRoots(module)) {
+        if (Objects.equals(contentRoot, androidDir)) {
           return true;
         }
       }
@@ -392,21 +436,10 @@ public class PubRoot {
     if (project.isDisposed()) {
       return null;
     }
-    return ProjectRootManager.getInstance(project).getFileIndex().getModuleForFile(pubspec);
-  }
+    var manager = ProjectRootManager.getInstance(project);
+    if (manager == null) return null;
 
-  /**
-   * Returns true if the PubRoot is an ancestor of the given file.
-   */
-  public boolean contains(@NotNull VirtualFile file) {
-    VirtualFile dir = file.getParent();
-    while (dir != null) {
-      if (dir.equals(root)) {
-        return true;
-      }
-      dir = dir.getParent();
-    }
-    return false;
+    return manager.getFileIndex().getModuleForFile(pubspec);
   }
 
   @Override
@@ -415,6 +448,6 @@ public class PubRoot {
   }
 
   public static boolean isPubspec(@NotNull VirtualFile file) {
-    return !file.isDirectory() && file.getName().equals("pubspec.yaml");
+    return !file.isDirectory() && file.exists() && file.getName().equals(PUBSPEC_YAML);
   }
 }

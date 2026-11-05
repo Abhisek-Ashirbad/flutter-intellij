@@ -8,10 +8,10 @@ package io.flutter.run.test;
 import com.intellij.execution.configurations.ConfigurationFactory;
 import com.intellij.execution.configurations.ConfigurationTypeBase;
 import com.intellij.execution.configurations.RunConfiguration;
-import com.intellij.openapi.extensions.Extensions;
 import com.intellij.openapi.project.Project;
 import icons.FlutterIcons;
 import io.flutter.run.FlutterRunConfigurationType;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -19,18 +19,25 @@ import org.jetbrains.annotations.NotNull;
  */
 public class FlutterTestConfigType extends ConfigurationTypeBase {
   protected FlutterTestConfigType() {
-    super("FlutterTestConfigType", "Flutter Test",
-          "description", FlutterIcons.Flutter_test);
+    super("FlutterTestConfigType", "Flutter Test", "description", FlutterIcons.Flutter_test);
+
     addFactory(new Factory(this));
   }
 
   public static FlutterTestConfigType getInstance() {
-    return Extensions.findExtension(CONFIGURATION_TYPE_EP, FlutterTestConfigType.class);
+    return CONFIGURATION_TYPE_EP.findExtensionOrFail(FlutterTestConfigType.class);
   }
 
   private static class Factory extends ConfigurationFactory {
     public Factory(FlutterTestConfigType type) {
       super(type);
+    }
+
+    @NotNull
+    @Override
+    @NonNls
+    public String getId() {
+      return "Flutter Test";
     }
 
     @NotNull

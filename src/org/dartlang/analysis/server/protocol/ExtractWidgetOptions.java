@@ -1,9 +1,9 @@
 /*
- * Copyright (c) 2018, the Dart project authors.  Please see the AUTHORS file
+ * Copyright (c) 2019, the Dart project authors. Please see the AUTHORS file
  * for details. All rights reserved. Use of this source code is governed by a
  * BSD-style license that can be found in the LICENSE file.
  *
- * This file has been automatically generated.  Please do not edit it manually.
+ * This file has been automatically generated. Please do not edit it manually.
  * To regenerate the file, use the script "pkg/analysis_server/tool/spec/generate_files".
  */
 package org.dartlang.analysis.server.protocol;
@@ -13,10 +13,15 @@ import com.google.dart.server.utilities.general.ObjectUtilities;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
+/**
+ * @coverage dart.server.generated.types
+ */
 @SuppressWarnings("unused")
 public class ExtractWidgetOptions extends RefactoringOptions {
 
@@ -38,15 +43,15 @@ public class ExtractWidgetOptions extends RefactoringOptions {
 
   @Override
   public boolean equals(Object obj) {
-    if (obj instanceof ExtractWidgetOptions) {
-      final ExtractWidgetOptions other = (ExtractWidgetOptions)obj;
-      return ObjectUtilities.equals(other.name, name);
+    if (obj instanceof ExtractWidgetOptions other) {
+      return
+        ObjectUtilities.equals(other.name, name);
     }
     return false;
   }
 
   public static ExtractWidgetOptions fromJson(JsonObject jsonObject) {
-    final String name = jsonObject.get("name").getAsString();
+    String name = jsonObject.get("name").getAsString();
     return new ExtractWidgetOptions(name);
   }
 
@@ -54,9 +59,10 @@ public class ExtractWidgetOptions extends RefactoringOptions {
     if (jsonArray == null) {
       return EMPTY_LIST;
     }
-    final ArrayList<ExtractWidgetOptions> list = new ArrayList<>(jsonArray.size());
-    for (JsonElement aJsonArray : jsonArray) {
-      list.add(fromJson(aJsonArray.getAsJsonObject()));
+    ArrayList<ExtractWidgetOptions> list = new ArrayList<>(jsonArray.size());
+    Iterator<JsonElement> iterator = jsonArray.iterator();
+    while (iterator.hasNext()) {
+      list.add(fromJson(iterator.next().getAsJsonObject()));
     }
     return list;
   }
@@ -70,7 +76,9 @@ public class ExtractWidgetOptions extends RefactoringOptions {
 
   @Override
   public int hashCode() {
-    return name.hashCode();
+    HashCodeBuilder builder = new HashCodeBuilder();
+    builder.append(name);
+    return builder.toHashCode();
   }
 
   /**
@@ -81,14 +89,14 @@ public class ExtractWidgetOptions extends RefactoringOptions {
   }
 
   public JsonObject toJson() {
-    final JsonObject jsonObject = new JsonObject();
+    JsonObject jsonObject = new JsonObject();
     jsonObject.addProperty("name", name);
     return jsonObject;
   }
 
   @Override
   public String toString() {
-    final StringBuilder builder = new StringBuilder();
+    StringBuilder builder = new StringBuilder();
     builder.append("[");
     builder.append("name=");
     builder.append(name);

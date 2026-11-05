@@ -5,7 +5,6 @@
  */
 package io.flutter.actions;
 
-
 import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.project.Project;
 import io.flutter.FlutterMessages;
@@ -15,14 +14,15 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class FlutterPackagesUpgradeAction extends FlutterSdkAction {
-
   @Override
   public void startCommand(@NotNull Project project, @NotNull FlutterSdk sdk, @Nullable PubRoot root, @NotNull DataContext context) {
     if (root == null) {
-      FlutterMessages.showError("Cannot Find Pub Root",
-                                "Flutter packages upgrade can only be run within a directory with a pubspec.yaml file");
+      FlutterMessages.showError(
+        "Cannot Find Pub Root",
+        "Flutter pub upgrade can only be run within a directory with a pubspec.yaml file",
+        project);
       return;
     }
-    sdk.startPackagesUpgrade(root, project);
+    sdk.startPubUpgrade(root, project);
   }
 }

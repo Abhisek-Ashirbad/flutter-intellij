@@ -8,7 +8,7 @@ package io.flutter.utils;
 import com.intellij.openapi.application.Application;
 import com.intellij.openapi.application.ApplicationManager;
 
-import javax.swing.*;
+import javax.swing.SwingUtilities;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
@@ -40,9 +40,10 @@ public class AsyncUtils {
   public static void invokeLater(Runnable runnable) {
     final Application app = ApplicationManager.getApplication();
     if (app == null || app.isUnitTestMode()) {
-      // This case existing to support unittesting.
+      // This case existing to support unit testing.
       SwingUtilities.invokeLater(runnable);
-    } else {
+    }
+    else {
       app.invokeLater(runnable);
     }
   }

@@ -5,7 +5,6 @@
  */
 package io.flutter.utils;
 
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
@@ -58,9 +57,9 @@ public class ProgressHelper {
           }
         };
 
-        ApplicationManager.getApplication().invokeLater(() -> {
+        OpenApiUtils.safeInvokeLater(() -> {
           synchronized (myTasks) {
-            if (myTask != null) {
+            if (myTask != null && !myProject.isDisposed()) {
               ProgressManager.getInstance().run(myTask);
             }
           }
